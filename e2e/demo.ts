@@ -13,7 +13,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function shortInvoice(invoice: string): string {
-  return invoice.slice(0, 48) + '…';
+  return invoice.slice(0, 16) + '…' + invoice.slice(-24);
 }
 
 async function pay(payer: RlnClient, details: PaymentDetails): Promise<void> {
