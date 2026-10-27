@@ -1,0 +1,165 @@
+services:
+
+  # ── Bitcoin regtest node ───────────────────────────────────────────────────
+  bitcoind:
+    image: ruimarinho/bitcoin-core:28@sha256:1f93ce741760cd0360eba61a7a37432d88ca7680308e268b9d2b136779e0c32a
+    command:
+      - -regtest
+      - -server
+      - -txindex
+      - -rpcuser=user
+      - -rpcpassword=password
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -fallbackfee=0.0002
+      - -zmqpubrawblock=tcp://0.0.0.0:28332
+      - -zmqpubrawtx=tcp://0.0.0.0:28333
+    volumes:
+      - bitcoind-data:/home/bitcoin/.bitcoin
+    networks:
+      - rgb-net
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "-regtest",
+             "-rpcuser=user", "-rpcpassword=password", "getblockchaininfo"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # ── Electrum indexer ───────────────────────────────────────────────────────
+  # Required by RLN for UTXO scanning even in BlockSync mode.
+  electrs:
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0@sha256:560778444e7fa47a718ffaee371de9066e61aab4a674aae9ab90038899c50da6
+    environment:
+      BTCHOST: bitcoind
+      BTCRPCPORT: "18443"
+      BTCUSER: user
+      BTCPASS: password
+      NETWORK: regtest
+      PORT: "50001"
+    volumes:
+      - electrs-data:/srv/app/db
+    networks:
+      - rgb-net
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/50001'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # ── RGB proxy server ───────────────────────────────────────────────────────
+  # Relays RGB consignment data (off-chain asset state) between nodes.
+  proxy:
+    image: ghcr.io/rgb-tools/rgb-proxy-server:0.3.0@sha256:b06fe0f234c53030d54fe1e704daf4bc6ff2879a335124353175130a5112d313
+    volumes:
+      - proxy-data:/data
+    networks:
+      - rgb-net
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/3000'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ── Payee RLN node ─────────────────────────────────────────────────────────
+  # Payment module connects to this node's REST API.
+  rln-payee:
+    image: kaleidoswap/rgb-lightning-node:0.10.3@sha256:f162e1a0d75ee8e5ea8047c48ac62807cedb3a529bec1a68fa4d8b397e8d7c19
+    user: root
+    command:
+      - /data/rln
+      - --daemon-listening-port=${RLN_API_PORT:-3001}
+      - --ldk-peer-listening-port=9735
+      - --network=Regtest
+      - --disable-authentication
+    volumes:
+      - rln-payee-data:/data/rln
+    networks:
+      - rgb-net
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+      electrs:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/${RLN_API_PORT:-3001}'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ── Payer RLN node ─────────────────────────────────────────────────────────
+  # The e2e demo drives this node to send payments.
+  rln-payer:
+    image: kaleidoswap/rgb-lightning-node:0.10.3@sha256:f162e1a0d75ee8e5ea8047c48ac62807cedb3a529bec1a68fa4d8b397e8d7c19
+    user: root
+    command:
+      - /data/rln
+      - --daemon-listening-port=${RLN_API_PORT:-3001}
+      - --ldk-peer-listening-port=9735
+      - --network=Regtest
+      - --disable-authentication
+    volumes:
+      - rln-payer-data:/data/rln
+    networks:
+      - rgb-net
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+      electrs:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/${RLN_API_PORT:-3001}'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ── End-to-end demo ────────────────────────────────────────────────────────
+  # Run with: docker compose run --rm e2e
+  # profiles: ["manual"] prevents this from starting with `docker compose up`.
+  e2e:
+    profiles: ["manual"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PAYEE_RLN_URL: http://rln-payee:${RLN_API_PORT:-3001}
+      PAYER_RLN_URL: http://rln-payer:${RLN_API_PORT:-3001}
+      BITCOIN_HOST: bitcoind
+      BITCOIN_PORT: "18443"
+      BITCOIN_USER: user
+      BITCOIN_PASS: password
+      ELECTRS_HOST: electrs
+      ELECTRS_PORT: "50001"
+      PROXY_ENDPOINT: rpc://proxy:3000/json-rpc
+    networks:
+      - rgb-net
+    depends_on:
+      rln-payee:
+        condition: service_healthy
+      rln-payer:
+        condition: service_healthy
+      bitcoind:
+        condition: service_healthy
+      electrs:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
+
+volumes:
+  bitcoind-data:
+  electrs-data:
+  proxy-data:
+  rln-payee-data:
+  rln-payer-data:
+
+networks:
+  rgb-net:
+    driver: bridge

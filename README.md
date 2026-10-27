@@ -1,0 +1,138 @@
+# rgb-demo
+
+A TypeScript module that accepts USDT-like RGB asset payments over the Lightning Network,
+backed by two [RGB Lightning Node](https://github.com/RGB-Tools/rgb-lightning-node) instances
+running on Bitcoin regtest.
+
+## How to run
+
+**Prerequisites:** Docker (Engine ≥ 23 or Desktop ≥ 4.x). Docker builds one local image (the `e2e` runner); all other service images are pulled from public registries.
+
+```bash
+docker compose run e2e
+```
+
+`docker compose run e2e` starts all dependencies (bitcoind, electrs, proxy, two RLN nodes),
+runs `scripts/setup.js` to mine blocks / issue the asset / open a channel, then runs the
+TypeScript demo which exercises three scenarios:
+
+1. A payment created and fully paid → callback fires with `'paid'`
+2. A payment created with a 12-second expiry, never paid → callback fires with `'expired'`
+3. Three payments created concurrently, paid in reverse order → each callback fires correctly
+
+### Re-running
+
+Volumes persist between runs. Tear them down first if you want a clean state:
+
+```bash
+docker compose down -v
+docker compose run e2e
+```
+
+### Unit tests (no environment needed)
+
+```bash
+cd rgb-demo
+npm ci
+npm test
+```
+
+## Architecture
+
+```
+src/
+  types.ts            — PaymentDetails, AssetConfig, RLN API shapes
+  rln-client.ts       — Typed HTTP client for the RLN REST API
+  payment-module.ts   — PaymentModule: expectPayment() + setCallback()
+e2e/
+  demo.ts             — Three-scenario end-to-end demo
+__tests__/
+  payment-module.test.ts  — Unit tests (RlnClient mocked)
+scripts/
+  setup.ts            — Regtest environment bootstrap (TypeScript)
+  entrypoint.sh       — Thin launcher: runs setup.js then demo.js
+docker-compose.yml    — All six services (uses pre-built images; see Pinned versions table)
+Dockerfile            — Node.js image for e2e runner (built locally by compose)
+```
+
+### Payment flow
+
+```
+Payee (PaymentModule)               Payer (e2e demo)
+─────────────────────────────────   ──────────────────────────────
+POST /lninvoice {amt_msat, expiry}
+  → bolt11 invoice string
+
+return PaymentDetails {
+  invoice,       ← hand to payer
+  assetId,       ← payer must include
+  amount,        ← payer must include
+  ...
+}
+
+poll /invoicestatus every 2 s       POST /sendpayment {
+                                      invoice,
+                                      asset_id,
+                                      asset_amount,
+                                    }
+
+status == Succeeded                 Lightning + RGB settle atomically
+  → listPayments(), decode bolt11
+    verify asset_id + asset_amount
+  → callback('paid')   ← verified
+  → callback('invalid') ← mismatch
+status == Expired / wall-clock
+  → callback('expired')
+```
+
+### Pinned versions
+
+| Component | Image / Tag |
+|-----------|-------------|
+| rgb-lightning-node | `kaleidoswap/rgb-lightning-node:0.10.3` |
+| electrs | `registry.gitlab.com/hashbeam/docker/electrs:0.11.0` |
+| rgb-proxy-server | `ghcr.io/rgb-tools/rgb-proxy-server:0.3.0` |
+| bitcoind | `ruimarinho/bitcoin-core:28` |
+
+## Known limitations
+
+- **`--disable-authentication` flag** — used on both RLN nodes for demo simplicity.
+  If the pinned RLN version doesn't recognise this flag, the nodes won't start; switch
+  to a version that does or add Biscuit-token management to `RlnClient`.
+
+- **RLN image source** — `kaleidoswap/rgb-lightning-node:0.10.3` is a community-maintained
+  image; the upstream `RGB-Tools/rgb-lightning-node` repository publishes no official container
+  images or versioned releases. The RLN project is alpha software; CLI flags and API shapes
+  may change between versions.
+
+- **RLN does not validate RGB asset/amount before claiming (upstream bug
+  [RGB-Tools/rgb-lightning-node#180](https://github.com/RGB-Tools/rgb-lightning-node/pull/180))** —
+  the `PaymentClaimable` event handler in `ldk.rs` calls `claim_funds()` unconditionally,
+  releasing the payment preimage without checking whether the incoming HTLC carried the
+  correct RGB asset or the invoiced amount. A payer can therefore settle an invoice for
+  1,000 units of asset A with 1 unit, or with a different asset entirely.
+  `PaymentModule.verifyPayment()` is an application-layer guard for this: on `Succeeded`
+  it calls `listPayments`, decodes the bolt11 payment hash, and rejects any mismatch —
+  settling as `'invalid'` rather than `'paid'`. PR #180 (open, not yet merged into
+  0.10.3) adds the missing validation inside `PaymentClaimable` at the node level.
+
+- **Single-hop channel** — the demo opens a direct channel between payer and payee.
+  Multi-hop RGB routing is not exercised.
+
+- **RLN nodes run as root** — the kaleidoswap image requires `user: root` in the compose file for data directory ownership. This is acceptable for a sandboxed regtest environment but would need a proper user/volume ownership strategy in production.
+
+- **No graceful shutdown** — the `close()` method on `PaymentModule` clears the poll
+  timer but does not wait for in-flight callbacks to finish.
+
+- **Hardcoded regtest credentials** — `bitcoind` RPC credentials (`user`/`password`) are
+  hardcoded in `docker-compose.yml`. This is intentional for a self-contained regtest
+  environment with no external exposure. A production deployment must move credentials
+  to a secrets manager or at minimum an uncommitted `.env` file.
+
+- **Asset amount precision limit** — the RLN REST API accepts `asset_amount` as a JSON
+  number (IEEE 754 double), which cannot safely represent integers above `2^53 - 1`
+  (~9 quadrillion). For assets with high precision or large supply (e.g. real USDT at
+  6 decimal places with ~140 billion circulating supply ≈ 1.4 × 10^17 base units), amounts
+  above this threshold will be rejected with an explicit error rather than silently
+  truncated. A production integration would require the RLN API to accept amounts as
+  strings.
