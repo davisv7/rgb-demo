@@ -8,7 +8,7 @@ export interface PaymentDetails {
   expiresAt: Date;
 }
 
-export type PaymentStatus = 'paid' | 'expired' | 'invalid';
+export type PaymentStatus = 'paid' | 'expired';
 export type PaymentCallback = (invoiceId: string, status: PaymentStatus) => Promise<void>;
 
 export interface AssetConfig {
@@ -56,13 +56,6 @@ export interface PendingEntry {
   currency: string;
   amount: bigint;
   expiresAt: Date;
-}
-
-export interface RlnPayment {
-  payment_hash: string;
-  inbound: boolean;
-  asset_id?: string | null;
-  asset_amount?: number | null;
 }
 
 export interface AssetNia {

@@ -1,55 +1,37 @@
 import { PaymentModule } from '../src/payment-module';
 import { RlnClient } from '../src/rln-client';
-import { AssetConfig, InvoiceStatus, RlnPayment } from '../src/types';
+import { AssetConfig, InvoiceStatus } from '../src/types';
 
-jest.mock('../src/rln-client');
+jest.mock('../src/rln-client', () => ({
+  ...jest.requireActual('../src/rln-client'),
+  RlnClient: jest.fn(),
+}));
 
 const ASSET_ID = 'rgb:test-asset-id';
 const ASSET_REGISTRY = new Map<string, AssetConfig>([
   ['USDT', { assetId: ASSET_ID, ticker: 'USDT', precision: 0 }],
 ]);
 
-// Minimal bolt11 strings parseable by bolt11PaymentHash.
-// Structure: prefix + "1" (sep) + 7-word timestamp + "p"(type=1) + "p"(len_hi=1) + "5"(len_lo=20)
-// → len = (1<<5)|20 = 52 hash words + 6-char checksum stripped before parsing.
-// BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l': 'p'=1, '5'=20, 's'=16.
-const TEST_INVOICE   = `test1${'q'.repeat(7)}pp5${'q'.repeat(52)}${'q'.repeat(6)}`;
-const TEST_INVOICE_A = `test1${'q'.repeat(7)}pp5p${'q'.repeat(51)}${'q'.repeat(6)}`;
-
-// Expected payment hashes from those invoice strings (5-bit word groups decoded to bytes).
-// All-zero words → all-zero bytes; first word = 1 (0b00001) → first byte = 0x08.
-const ZERO_HASH = '0'.repeat(64);
-const A_HASH    = '08' + '0'.repeat(62);
-
-function makePayment(hash: string, assetAmount: number): RlnPayment {
-  return {
-    payment_hash: hash,
-    inbound: true,
-    asset_id: ASSET_ID,
-    asset_amount: assetAmount,
-  };
-}
+const TEST_INVOICE   = 'lnbcrt-test-invoice';
+const TEST_INVOICE_A = 'lnbcrt-test-invoice-a';
 
 function makeModule(overrides?: Partial<InstanceType<typeof RlnClient>>): {
   module: PaymentModule;
   mockInvoice: jest.Mock;
   mockStatus: jest.Mock;
-  mockListPayments: jest.Mock;
 } {
   const mockInvoice = jest.fn().mockResolvedValue({ invoice: TEST_INVOICE });
   const mockStatus = jest.fn();
-  const mockListPayments = jest.fn().mockResolvedValue([]);
 
   (RlnClient as jest.MockedClass<typeof RlnClient>).mockImplementation(() => ({
     lnInvoice: mockInvoice,
     invoiceStatus: mockStatus,
-    listPayments: mockListPayments,
     ...overrides,
   } as unknown as RlnClient));
 
   const client = new RlnClient('http://dummy');
   const module = new PaymentModule(client, ASSET_REGISTRY, 3_000_000, 50);
-  return { module, mockInvoice, mockStatus, mockListPayments };
+  return { module, mockInvoice, mockStatus };
 }
 
 afterEach(() => jest.clearAllMocks());
@@ -88,9 +70,8 @@ describe('PaymentModule.expectPayment', () => {
 
 describe('PaymentModule callback – paid', () => {
   it('fires callback with "paid" when invoiceStatus returns Succeeded', async () => {
-    const { module, mockStatus, mockListPayments } = makeModule();
+    const { module, mockStatus } = makeModule();
     mockStatus.mockResolvedValue('Succeeded');
-    mockListPayments.mockResolvedValue([makePayment(ZERO_HASH, 100)]);
 
     const cb = jest.fn().mockResolvedValue(undefined);
     module.setCallback(cb);
@@ -156,13 +137,9 @@ describe('PaymentModule – multiple concurrent invoices', () => {
     const mockStatus = jest.fn().mockImplementation((invoice: string) => {
       return Promise.resolve(statuses[invoice]);
     });
-    // inv-a (amount 100n) will reach verifyPayment; provide its matching payment
-    const mockListPayments = jest.fn().mockResolvedValue([makePayment(A_HASH, 100)]);
-
     (RlnClient as jest.MockedClass<typeof RlnClient>).mockImplementation(() => ({
       lnInvoice: mockInvoice,
       invoiceStatus: mockStatus,
-      listPayments: mockListPayments,
     } as unknown as RlnClient));
 
     const client = new RlnClient('http://dummy');
@@ -186,48 +163,9 @@ describe('PaymentModule – multiple concurrent invoices', () => {
   });
 });
 
-// invoicestatus:Succeeded alone is not sufficient — the RLN payee claims HTLCs
-// unconditionally without checking RGB asset or amount (ldk.rs PaymentClaimable handler).
-// verifyPayment() is the application-layer guard: it cross-checks listPayments and
-// rejects any mismatch so a wrong-asset payment cannot be settled as 'paid'.
-describe('PaymentModule – verifyPayment guards', () => {
-  it('fires "invalid" not "paid" when invoicestatus Succeeded but asset_id is wrong', async () => {
-    const { module, mockStatus, mockListPayments } = makeModule();
-    mockStatus.mockResolvedValue('Succeeded');
-    mockListPayments.mockResolvedValue([{ ...makePayment(ZERO_HASH, 100), asset_id: 'rgb:wrong-asset-id' }]);
-
-    const cb = jest.fn().mockResolvedValue(undefined);
-    module.setCallback(cb);
-
-    await module.expectPayment('inv-wrong-asset', 'USDT', 100n, 60);
-    await new Promise(r => setTimeout(r, 200));
-    module.close();
-
-    expect(cb).toHaveBeenCalledWith('inv-wrong-asset', 'invalid');
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
-
-  it('fires "invalid" not "paid" when invoicestatus Succeeded but asset_amount is wrong', async () => {
-    const { module, mockStatus, mockListPayments } = makeModule();
-    mockStatus.mockResolvedValue('Succeeded');
-    mockListPayments.mockResolvedValue([makePayment(ZERO_HASH, 50)]); // expected 100n
-
-    const cb = jest.fn().mockResolvedValue(undefined);
-    module.setCallback(cb);
-
-    await module.expectPayment('inv-wrong-amount', 'USDT', 100n, 60);
-    await new Promise(r => setTimeout(r, 200));
-    module.close();
-
-    expect(cb).toHaveBeenCalledWith('inv-wrong-amount', 'invalid');
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('PaymentModule – transient invoiceStatus errors', () => {
   it('retries on error without crashing', async () => {
     const mockInvoice = jest.fn().mockResolvedValue({ invoice: TEST_INVOICE });
-    const mockListPayments = jest.fn().mockResolvedValue([makePayment(ZERO_HASH, 1)]);
     const mockStatus = jest.fn()
       .mockRejectedValueOnce(new Error('network error'))
       .mockRejectedValueOnce(new Error('network error'))
@@ -236,7 +174,6 @@ describe('PaymentModule – transient invoiceStatus errors', () => {
     (RlnClient as jest.MockedClass<typeof RlnClient>).mockImplementation(() => ({
       lnInvoice: mockInvoice,
       invoiceStatus: mockStatus,
-      listPayments: mockListPayments,
     } as unknown as RlnClient));
 
     const client = new RlnClient('http://dummy');

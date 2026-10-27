@@ -77,10 +77,7 @@ poll /invoicestatus every 2 s       POST /sendpayment {
                                     }
 
 status == Succeeded                 Lightning + RGB settle atomically
-  → listPayments(), decode bolt11
-    verify asset_id + asset_amount
-  → callback('paid')   ← verified
-  → callback('invalid') ← mismatch
+  → callback('paid')
 status == Expired / wall-clock
   → callback('expired')
 ```
@@ -105,16 +102,14 @@ status == Expired / wall-clock
   images or versioned releases. The RLN project is alpha software; CLI flags and API shapes
   may change between versions.
 
-- **RLN does not validate RGB asset/amount before claiming (upstream bug
+- **No RGB asset/amount verification (upstream bug
   [RGB-Tools/rgb-lightning-node#180](https://github.com/RGB-Tools/rgb-lightning-node/pull/180))** —
-  the `PaymentClaimable` event handler in `ldk.rs` calls `claim_funds()` unconditionally,
-  releasing the payment preimage without checking whether the incoming HTLC carried the
-  correct RGB asset or the invoiced amount. A payer can therefore settle an invoice for
-  1,000 units of asset A with 1 unit, or with a different asset entirely.
-  `PaymentModule.verifyPayment()` is an application-layer guard for this: on `Succeeded`
-  it calls `listPayments`, decodes the bolt11 payment hash, and rejects any mismatch —
-  settling as `'invalid'` rather than `'paid'`. PR #180 (open, not yet merged into
-  0.10.3) adds the missing validation inside `PaymentClaimable` at the node level.
+  the `PaymentClaimable` handler in `ldk.rs` releases the preimage unconditionally without
+  checking the RGB asset or amount. A payer can therefore settle an invoice for 1,000 units
+  with 1 unit, or with a different asset entirely, and `PaymentModule` will fire the callback
+  with `'paid'`. `PaymentModule` does not include an application-layer guard for this; a
+  `Succeeded` status is taken at face value. PR #180 (open, not yet merged into 0.10.3)
+  would add the missing validation at the node level.
 
 - **Single-hop channel** — the demo opens a direct channel between payer and payee.
   Multi-hop RGB routing is not exercised.

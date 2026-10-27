@@ -4,7 +4,6 @@ import {
   Channel,
   InvoiceStatus,
   NodeInfo,
-  RlnPayment,
   UnlockConfig,
 } from './types';
 
@@ -39,13 +38,6 @@ const channelSchema = z.object({
   asset_remote_amount: z.number().optional(),
 });
 
-const rlnPaymentSchema = z.object({
-  payment_hash: z.string(),
-  inbound: z.boolean(),
-  asset_id: z.string().nullish(),
-  asset_amount: z.number().nullish(),
-});
-
 const assetNiaSchema = z.object({
   asset_id: z.string(),
   ticker: z.string(),
@@ -68,7 +60,6 @@ const btcBalanceResponseSchema    = z.object({ vanilla: z.object({ settled: z.nu
 const assetResponseSchema         = z.object({ asset: assetNiaSchema });
 const openChannelResponseSchema   = z.object({ temporary_channel_id: z.string() });
 const channelsResponseSchema      = z.object({ channels: z.array(channelSchema) });
-const paymentsResponseSchema      = z.object({ payments: z.array(rlnPaymentSchema) });
 const lnInvoiceResponseSchema     = z.object({ invoice: z.string() });
 const invoiceStatusResponseSchema = z.object({
   status: z.enum(['Pending', 'Succeeded', 'Failed', 'Expired']),
@@ -81,7 +72,7 @@ const sendPaymentResponseSchema   = z.object({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function toSafeNumber(n: bigint): number {
+export function toSafeNumber(n: bigint): number {
   if (n > BigInt(Number.MAX_SAFE_INTEGER))
     throw new Error(`asset_amount ${n} exceeds MAX_SAFE_INTEGER — RLN API cannot represent this value safely as a JSON number`);
   return Number(n);
@@ -182,14 +173,19 @@ export class RlnClient {
     capacity_sat: number;
     push_msat: number;
     asset_id?: string;
-    asset_amount?: number;
-    push_asset_amount?: number;
+    asset_amount?: bigint;
+    push_asset_amount?: bigint;
     public: boolean;
     with_anchors: boolean;
     fee_base_msat?: number;
     fee_proportional_millionths?: number;
   }): Promise<{ temporary_channel_id: string }> {
-    return openChannelResponseSchema.parse(await this.post('/openchannel', params));
+    const body = {
+      ...params,
+      asset_amount: params.asset_amount !== undefined ? toSafeNumber(params.asset_amount) : undefined,
+      push_asset_amount: params.push_asset_amount !== undefined ? toSafeNumber(params.push_asset_amount) : undefined,
+    };
+    return openChannelResponseSchema.parse(await this.post('/openchannel', body));
   }
 
   async listChannels(): Promise<Channel[]> {
@@ -231,7 +227,4 @@ export class RlnClient {
     return sendPaymentResponseSchema.parse(await this.post('/sendpayment', body));
   }
 
-  async listPayments(): Promise<RlnPayment[]> {
-    return paymentsResponseSchema.parse(await this.get('/listpayments')).payments;
-  }
 }

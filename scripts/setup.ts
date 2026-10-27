@@ -227,7 +227,7 @@ async function main(): Promise<void> {
     capacity_sat: 100_000,
     push_msat: 10_000_000,
     asset_id: asset.asset_id,
-    asset_amount: 100_000,
+    asset_amount: 100_000n,
     public: true,
     with_anchors: true,
   });
