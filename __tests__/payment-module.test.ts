@@ -41,7 +41,7 @@ describe('PaymentModule.expectPayment', () => {
     const { module } = makeModule();
     const before = Date.now();
     const details = await module.expectPayment('inv-1', 'USDT', 500n, 60);
-    module.close();
+    await module.close();
 
     expect(details.invoiceId).toBe('inv-1');
     expect(details.currency).toBe('USDT');
@@ -55,13 +55,13 @@ describe('PaymentModule.expectPayment', () => {
   it('throws for unknown currency', async () => {
     const { module } = makeModule();
     await expect(module.expectPayment('inv-x', 'BTC', 1n)).rejects.toThrow('Unknown currency');
-    module.close();
+    await module.close();
   });
 
   it('passes expiry_sec to lnInvoice', async () => {
     const { module, mockInvoice } = makeModule();
     await module.expectPayment('inv-2', 'USDT', 1n, 300);
-    module.close();
+    await module.close();
     expect(mockInvoice).toHaveBeenCalledWith(
       expect.objectContaining({ expiry_sec: 300 }),
     );
@@ -78,7 +78,7 @@ describe('PaymentModule callback – paid', () => {
 
     await module.expectPayment('inv-3', 'USDT', 100n, 60);
     await new Promise(r => setTimeout(r, 200)); // let a few poll ticks fire
-    module.close();
+    await module.close();
 
     expect(cb).toHaveBeenCalledWith('inv-3', 'paid');
     expect(cb).toHaveBeenCalledTimes(1); // not called again after resolution
@@ -95,7 +95,7 @@ describe('PaymentModule callback – expired via RLN status', () => {
 
     await module.expectPayment('inv-4', 'USDT', 100n, 60);
     await new Promise(r => setTimeout(r, 200));
-    module.close();
+    await module.close();
 
     expect(cb).toHaveBeenCalledWith('inv-4', 'expired');
     expect(cb).toHaveBeenCalledTimes(1);
@@ -113,7 +113,7 @@ describe('PaymentModule callback – expired via wall clock', () => {
     // 0-second expiry → expires immediately on next poll
     await module.expectPayment('inv-5', 'USDT', 100n, 0);
     await new Promise(r => setTimeout(r, 300));
-    module.close();
+    await module.close();
 
     expect(cb).toHaveBeenCalledWith('inv-5', 'expired');
   });
@@ -153,7 +153,7 @@ describe('PaymentModule – multiple concurrent invoices', () => {
     await module.expectPayment('inv-c', 'USDT', 300n, 60);
 
     await new Promise(r => setTimeout(r, 300));
-    module.close();
+    await module.close();
 
     const calls = new Map(cb.mock.calls.map(([id, st]) => [id, st]));
     expect(calls.get('inv-a')).toBe('paid');
@@ -184,7 +184,7 @@ describe('PaymentModule – transient invoiceStatus errors', () => {
 
     await module.expectPayment('inv-err', 'USDT', 1n, 60);
     await new Promise(r => setTimeout(r, 400));
-    module.close();
+    await module.close();
 
     expect(cb).toHaveBeenCalledWith('inv-err', 'paid');
   });

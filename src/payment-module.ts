@@ -13,6 +13,7 @@ export class PaymentModule {
   private readonly pending = new Map<string, PendingEntry>();
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private inflightPoll: Promise<void> | null = null;
+  private closed = false;
 
   constructor(
     private readonly rlnClient: RlnClient,
@@ -64,6 +65,7 @@ export class PaymentModule {
   }
 
   private scheduleNextPoll(): void {
+    if (this.closed) return;
     this.pollTimer = setTimeout(() => {
       this.inflightPoll = this.poll().finally(() => {
         this.inflightPoll = null;
@@ -110,6 +112,7 @@ export class PaymentModule {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
     if (this.pollTimer !== null) { clearTimeout(this.pollTimer); this.pollTimer = null; }
     if (this.inflightPoll) await this.inflightPoll;
   }

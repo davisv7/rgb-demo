@@ -116,9 +116,6 @@ status == Expired / wall-clock
 
 - **RLN nodes run as root** — the kaleidoswap image requires `user: root` in the compose file for data directory ownership. This is acceptable for a sandboxed regtest environment but would need a proper user/volume ownership strategy in production.
 
-- **No graceful shutdown** — the `close()` method on `PaymentModule` clears the poll
-  timer but does not wait for in-flight callbacks to finish.
-
 - **Hardcoded regtest credentials** — `bitcoind` RPC credentials (`user`/`password`) are
   hardcoded in `docker-compose.yml`. This is intentional for a self-contained regtest
   environment with no external exposure. A production deployment must move credentials
