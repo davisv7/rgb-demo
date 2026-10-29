@@ -15,7 +15,7 @@ const ASSET_REGISTRY = new Map<string, AssetConfig>([
 const TEST_INVOICE   = 'lnbcrt-test-invoice';
 const TEST_INVOICE_A = 'lnbcrt-test-invoice-a';
 
-function makeModule(overrides?: Partial<InstanceType<typeof RlnClient>>): {
+function makeModule(): {
   module: PaymentModule;
   mockInvoice: jest.Mock;
   mockStatus: jest.Mock;
@@ -26,7 +26,6 @@ function makeModule(overrides?: Partial<InstanceType<typeof RlnClient>>): {
   (RlnClient as jest.MockedClass<typeof RlnClient>).mockImplementation(() => ({
     lnInvoice: mockInvoice,
     invoiceStatus: mockStatus,
-    ...overrides,
   } as unknown as RlnClient));
 
   const client = new RlnClient('http://dummy');

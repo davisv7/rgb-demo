@@ -1,4 +1,4 @@
-import { AssetConfig, PaymentCallback, PaymentDetails, PaymentStatus } from '../src/types';
+import { AssetConfig, PaymentCallback, PaymentStatus } from '../src/types';
 import { PaymentModule } from '../src/payment-module';
 import { RlnClient } from '../src/rln-client';
 
@@ -14,14 +14,6 @@ function sleep(ms: number): Promise<void> {
 
 function shortInvoice(invoice: string): string {
   return invoice.slice(0, 16) + '…' + invoice.slice(-24);
-}
-
-async function pay(payer: RlnClient, details: PaymentDetails): Promise<void> {
-  await payer.sendPayment({
-    invoice: details.invoice,
-    asset_id: details.assetId,
-    asset_amount: details.amount,
-  });
 }
 
 async function waitForSettlement(
@@ -85,7 +77,7 @@ async function main(): Promise<void> {
   console.log(`  amount   ${d1.amount} USDT  (${d1.amtMsat} msat)\n`);
 
   console.log('  payer sending…');
-  await pay(payerClient, d1);
+  await payerClient.sendPayment({ invoice: d1.invoice, asset_id: d1.assetId, asset_amount: d1.amount });
   await waitForSettlement(results, ['pay-001']);
 
   // ── Scenario 2: expired ─────────────────────────────────────────────────────
@@ -123,9 +115,9 @@ async function main(): Promise<void> {
   console.log('');
 
   // Paid in reverse creation order without waiting for any settlement in between.
-  await pay(payerClient, d3c);
-  await pay(payerClient, d3a);
-  await pay(payerClient, d3b);
+  await payerClient.sendPayment({ invoice: d3c.invoice, asset_id: d3c.assetId, asset_amount: d3c.amount });
+  await payerClient.sendPayment({ invoice: d3a.invoice, asset_id: d3a.assetId, asset_amount: d3a.amount });
+  await payerClient.sendPayment({ invoice: d3b.invoice, asset_id: d3b.assetId, asset_amount: d3b.amount });
 
   await waitForSettlement(results, ['pay-003a', 'pay-003b', 'pay-003c']);
 

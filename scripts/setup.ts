@@ -101,7 +101,7 @@ async function waitUnlocked(client: RlnClient, label: string): Promise<void> {
 async function waitBtcBalance(client: RlnClient, label: string): Promise<void> {
   log(`waiting for ${label} BTC balance…`);
   await retry(async () => {
-    const { vanilla } = await client.btcBalance(false);
+    const { vanilla } = await client.btcBalance();
     if (vanilla.settled === 0) throw new Error('no balance yet');
   }, 120, 2_000, `${label} BTC balance`);
   log(`${label} has BTC`);

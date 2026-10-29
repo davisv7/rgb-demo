@@ -48,7 +48,7 @@ export class PaymentModule {
       asset_amount: amount,
     });
 
-    const entry: PendingEntry = { invoice, assetId: asset.assetId, currency, amount, expiresAt };
+    const entry: PendingEntry = { invoice, expiresAt };
     this.pending.set(invoiceId, entry);
 
     if (this.pollTimer === null) this.scheduleNextPoll();

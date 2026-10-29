@@ -52,9 +52,6 @@ export type InvoiceStatus = 'Pending' | 'Succeeded' | 'Failed' | 'Expired';
 
 export interface PendingEntry {
   invoice: string;
-  assetId: string;
-  currency: string;
-  amount: bigint;
   expiresAt: Date;
 }
 

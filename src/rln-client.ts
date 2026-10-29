@@ -217,7 +217,7 @@ export class RlnClient {
     amt_msat?: number;
     asset_id?: string;
     asset_amount?: bigint;
-  }): Promise<{ payment_id: string; status: string; payment_hash?: string }> {
+  }): Promise<{ payment_id: string; status: 'Pending' | 'Succeeded' | 'Failed'; payment_hash?: string }> {
     const body = {
       ...params,
       asset_amount: params.asset_amount !== undefined
