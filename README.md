@@ -41,7 +41,7 @@ __tests__/
   payment-module.test.ts  — Unit tests (RlnClient mocked)
 scripts/
   setup.ts            — Regtest environment bootstrap (TypeScript)
-  teardown.ts         — Force-closes channels + mines close confirmations
+  teardown.ts         — Cooperatively closes channels + mines close confirmations
   entrypoint.sh       — Thin launcher: setup → demo → teardown (via exit trap)
 docker-compose.yml    — All six services (uses pre-built images; see Pinned versions table)
 Dockerfile            — Node.js image for e2e runner (built locally by compose)

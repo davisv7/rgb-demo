@@ -50,7 +50,7 @@ async function main(): Promise<void> {
       await payer.closeChannel({
         channel_id: ch.channel_id,
         peer_pubkey: ch.peer_pubkey,
-        force: true,
+        force: false,
       });
       log(`  closed ${ch.channel_id.slice(0, 16)}…`);
       closedCount++;
@@ -59,10 +59,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // RLN's /closechannel returns before the commitment tx is actually broadcast —
+  // RLN's /closechannel returns before the settlement tx is actually broadcast —
   // poll bitcoind's mempool so we don't mine blocks that confirm nothing.
   if (closedCount > 0) {
-    log(`waiting for ${closedCount} force-close tx(s) to hit mempool…`);
+    log(`waiting for ${closedCount} close tx(s) to hit mempool…`);
     const deadline = Date.now() + 30_000;
     let mempool: string[] = [];
     while (Date.now() < deadline) {
