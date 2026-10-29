@@ -66,8 +66,7 @@ services:
   # ── Payee RLN node ─────────────────────────────────────────────────────────
   # Payment module connects to this node's REST API.
   rln-payee:
-    image: kaleidoswap/rgb-lightning-node:0.10.3@sha256:f162e1a0d75ee8e5ea8047c48ac62807cedb3a529bec1a68fa4d8b397e8d7c19
-    user: root
+    image: huhwhat/rgb-lightning-node:pr180@sha256:71b4b1ef8ca96f48b972e0cf985a36389d40583b2e3ec22f278ee37b93cf05b0
     command:
       - /data/rln
       - --daemon-listening-port=${RLN_API_PORT:-3001}
@@ -95,8 +94,7 @@ services:
   # ── Payer RLN node ─────────────────────────────────────────────────────────
   # The e2e demo drives this node to send payments.
   rln-payer:
-    image: kaleidoswap/rgb-lightning-node:0.10.3@sha256:f162e1a0d75ee8e5ea8047c48ac62807cedb3a529bec1a68fa4d8b397e8d7c19
-    user: root
+    image: huhwhat/rgb-lightning-node:pr180@sha256:71b4b1ef8ca96f48b972e0cf985a36389d40583b2e3ec22f278ee37b93cf05b0
     command:
       - /data/rln
       - --daemon-listening-port=${RLN_API_PORT:-3001}

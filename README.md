@@ -82,11 +82,16 @@ status == Expired / wall-clock
   → callback('expired')
 ```
 
+The RLN node validates that the received asset ID and amount match the invoice before
+releasing the payment preimage
+([RGB-Tools/rgb-lightning-node#180](https://github.com/RGB-Tools/rgb-lightning-node/pull/180)),
+so underpayments and wrong-asset payments are rejected at the node level.
+
 ### Pinned versions
 
 | Component | Image / Tag |
 |-----------|-------------|
-| rgb-lightning-node | `kaleidoswap/rgb-lightning-node:0.10.3` |
+| rgb-lightning-node | `huhwhat/rgb-lightning-node:pr180` |
 | electrs | `registry.gitlab.com/hashbeam/docker/electrs:0.11.0` |
 | rgb-proxy-server | `ghcr.io/rgb-tools/rgb-proxy-server:0.3.0` |
 | bitcoind | `ruimarinho/bitcoin-core:28` |
@@ -97,24 +102,8 @@ status == Expired / wall-clock
   If the pinned RLN version doesn't recognise this flag, the nodes won't start; switch
   to a version that does or add Biscuit-token management to `RlnClient`.
 
-- **RLN image source** — `kaleidoswap/rgb-lightning-node:0.10.3` is a community-maintained
-  image; the upstream `RGB-Tools/rgb-lightning-node` repository publishes no official container
-  images or versioned releases. The RLN project is alpha software; CLI flags and API shapes
-  may change between versions.
-
-- **No RGB asset/amount verification (upstream bug
-  [RGB-Tools/rgb-lightning-node#180](https://github.com/RGB-Tools/rgb-lightning-node/pull/180))** —
-  the `PaymentClaimable` handler in `ldk.rs` releases the preimage unconditionally without
-  checking the RGB asset or amount. A payer can therefore settle an invoice for 1,000 units
-  with 1 unit, or with a different asset entirely, and `PaymentModule` will fire the callback
-  with `'paid'`. `PaymentModule` does not include an application-layer guard for this; a
-  `Succeeded` status is taken at face value. PR #180 (open, not yet merged into 0.10.3)
-  would add the missing validation at the node level.
-
 - **Single-hop channel** — the demo opens a direct channel between payer and payee.
   Multi-hop RGB routing is not exercised.
-
-- **RLN nodes run as root** — the kaleidoswap image requires `user: root` in the compose file for data directory ownership. This is acceptable for a sandboxed regtest environment but would need a proper user/volume ownership strategy in production.
 
 - **Hardcoded regtest credentials** — `bitcoind` RPC credentials (`user`/`password`) are
   hardcoded in `docker-compose.yml`. This is intentional for a self-contained regtest
