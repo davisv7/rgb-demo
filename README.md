@@ -13,21 +13,12 @@ docker compose run e2e
 ```
 
 `docker compose run e2e` starts all dependencies (bitcoind, electrs, proxy, two RLN nodes),
-runs `scripts/setup.js` to mine blocks / issue the asset / open a channel, then runs the
+runs `scripts/setup.ts` to mine blocks / issue the asset / open a channel, then runs the
 TypeScript demo which exercises three scenarios:
 
 1. A payment created and fully paid → callback fires with `'paid'`
-2. A payment created with a 12-second expiry, never paid → callback fires with `'expired'`
+2. A payment created with a 6-second expiry, never paid → callback fires with `'expired'`
 3. Three payments created concurrently, paid in reverse order → each callback fires correctly
-
-### Re-running
-
-Volumes persist between runs. Tear them down first if you want a clean state:
-
-```bash
-docker compose down -v
-docker compose run e2e
-```
 
 ### Unit tests (no environment needed)
 
@@ -50,7 +41,8 @@ __tests__/
   payment-module.test.ts  — Unit tests (RlnClient mocked)
 scripts/
   setup.ts            — Regtest environment bootstrap (TypeScript)
-  entrypoint.sh       — Thin launcher: runs setup.js then demo.js
+  teardown.ts         — Force-closes channels + mines close confirmations
+  entrypoint.sh       — Thin launcher: setup → demo → teardown (via exit trap)
 docker-compose.yml    — All six services (uses pre-built images; see Pinned versions table)
 Dockerfile            — Node.js image for e2e runner (built locally by compose)
 ```

@@ -192,6 +192,14 @@ export class RlnClient {
     return channelsResponseSchema.parse(await this.get('/listchannels')).channels;
   }
 
+  async closeChannel(params: {
+    channel_id: string;
+    peer_pubkey: string;
+    force: boolean;
+  }): Promise<void> {
+    await this.post('/closechannel', params);
+  }
+
   async lnInvoice(params: {
     amt_msat: number;
     expiry_sec: number;

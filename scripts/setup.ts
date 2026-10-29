@@ -166,7 +166,7 @@ async function main(): Promise<void> {
     bitcoindRpcPassword: BITCOIN_PASS,
     bitcoindRpcHost: BITCOIN_HOST,
     bitcoindRpcPort: BITCOIN_PORT,
-    indexerUrl: `${ELECTRS_HOST}:${ELECTRS_PORT}`,
+    indexerUrl: `tcp://${ELECTRS_HOST}:${ELECTRS_PORT}`,
     proxyEndpoint: PROXY_ENDPOINT,
     announceAlias: alias,
   });

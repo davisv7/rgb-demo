@@ -20,10 +20,16 @@ async function waitForSettlement(
   results: Map<string, PaymentStatus>,
   ids: string[],
   timeoutMs = 30_000,
+  showElapsed = false,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  const start = Date.now();
+  const deadline = start + timeoutMs;
   while (Date.now() < deadline) {
     if (ids.every(id => results.has(id))) return;
+    if (showElapsed) {
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      process.stdout.write(`\r  elapsed ${elapsed}s `);
+    }
     await sleep(500);
   }
   const missing = ids.filter(id => !results.has(id));
@@ -51,6 +57,7 @@ async function main(): Promise<void> {
   const callback: PaymentCallback = async (invoiceId, status) => {
     results.set(invoiceId, status);
     const icon = status === 'paid' ? '✓' : '✗';
+    process.stdout.write('\r\x1b[K'); // clear in-place elapsed counter if any
     console.log(`  ${icon} callback fired  ${invoiceId} → ${status}`);
   };
 
@@ -84,16 +91,16 @@ async function main(): Promise<void> {
   console.log(`\n${HR}`);
   console.log('  Scenario 2 of 3 — Expired Payment');
   console.log(`${HR}`);
-  console.log('  Payee creates an invoice with a 12-second expiry.');
+  console.log('  Payee creates an invoice with a 6-second expiry.');
   console.log('  No payment is sent. Callback must fire with "expired".\n');
 
-  const d2 = await module.expectPayment('pay-002', 'USDT', 500n, 12);
+  const d2 = await module.expectPayment('pay-002', 'USDT', 500n, 6);
   console.log(`  invoice  ${shortInvoice(d2.invoice)}`);
-  console.log(`  amount   ${d2.amount} USDT  (expires in 12s — not paying)\n`);
+  console.log(`  amount   ${d2.amount} USDT  (expires in 6s — not paying)\n`);
 
   console.log('  waiting for expiry…');
-  // 12s invoice + up to 2s poll interval + headroom for slow environments
-  await waitForSettlement(results, ['pay-002'], 30_000);
+  // 6s invoice + up to 2s poll interval + headroom for slow environments
+  await waitForSettlement(results, ['pay-002'], 30_000, true);
 
   // ── Scenario 3: concurrent, out-of-order ────────────────────────────────────
   console.log(`\n${HR}`);
