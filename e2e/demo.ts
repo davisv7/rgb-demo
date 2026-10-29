@@ -129,7 +129,7 @@ async function main(): Promise<void> {
 
   await waitForSettlement(results, ['pay-003a', 'pay-003b', 'pay-003c']);
 
-  module.close();
+  await module.close();
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   console.log(`\n${HR2}`);
